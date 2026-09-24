@@ -11,8 +11,8 @@ defmodule ElixirOtp.Application do
       ElixirOtpWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:elixir_otp, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirOtp.PubSub},
-      # Start a worker by calling: ElixirOtp.Worker.start_link(arg)
-      # {ElixirOtp.Worker, arg},
+      {ElixirOtp.JobSupervisor, :job_supervisor},
+
       # Start to serve requests, typically the last entry
       ElixirOtpWeb.Endpoint
     ]
