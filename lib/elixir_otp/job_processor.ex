@@ -5,7 +5,9 @@ defmodule ElixirOtp.JobProcessor do
 
   @max_concurrent_tasks 5
   @max_retries 3
-  @default_timeout 10
+  @job_duration 15_000
+  @default_timeout 5_000
+  @max_timeout 30_000
 
   defstruct workers_running: [],
             jobs: []
@@ -27,7 +29,7 @@ defmodule ElixirOtp.JobProcessor do
   # callbacks
   @impl true
   def init(_state) do
-    # Start processing loop after a short delay to make everything is setup
+    # Start processing loop after a short delay to make sure everything is setup
     Process.send_after(self(), :tick, 1000)
 
     state = %__MODULE__{
@@ -47,7 +49,7 @@ defmodule ElixirOtp.JobProcessor do
   def handle_info(:tick, state) do
     new_state = process_next_job(state)
 
-    interval = if length(new_state.workers_running) == 0, do: 1000, else: 500
+    interval = if length(new_state.workers_running) == 0, do: 2000, else: 0
 
     Process.send_after(self(), :tick, interval)
     {:noreply, new_state}
@@ -79,28 +81,13 @@ defmodule ElixirOtp.JobProcessor do
 
   @impl true
   def handle_info({:retry_job, job}, state) do
-    case jobs_queued() do
-      false ->
-        job = update_job_status(job, :retrying)
-
-        worker =
-          Task.Supervisor.async_nolink(:worker_supervisor, fn ->
-            execute_job(job)
-          end)
-
-        new_state = update_workers_running(:add, %{worker_ref: worker.ref, job: job}, state)
-
-        {:noreply, new_state}
-
-      true ->
-        new_state = handle_retry(job, state)
-        {:noreply, new_state}
-    end
+    new_state = JobQueue.list_jobs() |> process_failed_job(job, state)
+    {:noreply, new_state}
   end
 
   @impl true
   def handle_info({worker_ref, result}, state) do
-    # Worker completed!
+    # Worker completed job!
     Process.demonitor(worker_ref, [:flush])
 
     worker = Enum.find(state.workers_running, &(&1.worker_ref == worker_ref))
@@ -110,12 +97,7 @@ defmodule ElixirOtp.JobProcessor do
         update_job_status(worker.job, :completed)
 
       {:error, _reason} ->
-        # Retry failed job
-        if worker.job.retries < @max_retries do
-          send(self(), {:retry_job, update_job_status(worker.job, :retried)})
-        else
-          update_job_status(worker.job, :failed)
-        end
+        fail_or_retry_job(worker)
     end
 
     new_state = update_workers_running(:remove, worker, state)
@@ -127,11 +109,7 @@ defmodule ElixirOtp.JobProcessor do
   def handle_info({:DOWN, worker_ref, :process, _pid, _reason}, state) do
     worker = Enum.find(state.workers_running, &(&1.worker_ref == worker_ref))
 
-    if worker.job.retries < @max_retries do
-      send(self(), {:retry_job, update_job_status(worker.job, :retried)})
-    else
-      update_job_status(worker.job, :failed)
-    end
+    fail_or_retry_job(worker)
 
     new_state = update_workers_running(:remove, worker, state)
 
@@ -139,14 +117,12 @@ defmodule ElixirOtp.JobProcessor do
   end
 
   # Private functions
-  defp jobs_queued() do
-    case JobQueue.list_jobs() do
-      [] ->
-        false
+  defp fail_or_retry_job(worker) when worker.job.retries < @max_retries do
+    send(self(), {:retry_job, update_job_status(worker.job, :retried)})
+  end
 
-      _ ->
-        true
-    end
+  defp fail_or_retry_job(worker) do
+    update_job_status(worker.job, :failed)
   end
 
   defp update_job_status(job, status) do
@@ -174,21 +150,25 @@ defmodule ElixirOtp.JobProcessor do
     Enum.reject(workers_running, &(&1.worker_ref == worker_ref))
   end
 
-  defp handle_retry(job, state) do
-    next_timeout = Map.get(job, :timeout, @default_timeout) |> exponential_backoff()
+  defp exponential_backoff(retries) do
+    next_timeout = @default_timeout * (:math.pow(2, retries - 1) |> round())
+    if next_timeout > @max_timeout, do: @max_timeout, else: next_timeout
+  end
 
-    updated_job = Map.put(job, :timeout, next_timeout)
+  defp process_failed_job(queue, job, state)
+       when length(queue) > 0 or length(state.workers_running) == @max_concurrent_tasks do
+    next_timeout = Map.get(job, :retries) |> exponential_backoff()
 
-    Process.send_after(
-      self(),
-      {:retry_job, update_job_status(updated_job, :deferred)},
-      next_timeout
-    )
+    updated_job = update_job_status(Map.put(job, :timeout, next_timeout), :deferred)
+
+    Process.send_after(self(), {:retry_job, updated_job}, next_timeout)
 
     state
   end
 
-  defp exponential_backoff(timeout), do: :math.pow(timeout, 2) |> round()
+  defp process_failed_job(_queue, job, state) do
+    start_worker(job, :retrying, state)
+  end
 
   defp process_next_job(%{workers_running: current} = state)
        when length(current) == @max_concurrent_tasks do
@@ -201,19 +181,37 @@ defmodule ElixirOtp.JobProcessor do
         state
 
       {:ok, job} ->
-        job = update_job_status(job, :running)
-
-        worker =
-          Task.Supervisor.async_nolink(:worker_supervisor, fn ->
-            execute_job(job)
-          end)
-
-        update_workers_running(:add, %{worker_ref: worker.ref, job: job}, state)
+        start_worker(job, :running, state)
     end
   end
 
+  defp start_worker(job, status, state) do
+    job = update_job_status(job, status)
+
+    worker =
+      Task.Supervisor.async_nolink(:worker_supervisor, fn ->
+        execute_job(job)
+      end)
+
+    update_workers_running(:add, %{worker_ref: worker.ref, job: job}, state)
+  end
+
+  defp update_workers_running(option, worker, state) do
+    new_state =
+      case option do
+        :add ->
+          %{state | workers_running: state.workers_running ++ [worker]}
+
+        :remove ->
+          %{state | workers_running: remove_worker(state.workers_running, worker.worker_ref)}
+      end
+
+    client_update_workers_running(new_state.workers_running)
+    new_state
+  end
+
   defp execute_job(job) do
-    Process.sleep(5000)
+    Process.sleep(@job_duration)
 
     number = :rand.uniform(100)
 
@@ -230,20 +228,6 @@ defmodule ElixirOtp.JobProcessor do
       "job_updates",
       {:update_jobs_list, jobs}
     )
-  end
-
-  defp update_workers_running(option, worker, state) do
-    new_state =
-      case option do
-        :add ->
-          %{state | workers_running: state.workers_running ++ [worker]}
-
-        :remove ->
-          %{state | workers_running: remove_worker(state.workers_running, worker.worker_ref)}
-      end
-
-    client_update_workers_running(new_state.workers_running)
-    new_state
   end
 
   defp client_update_workers_running(workers_running) do

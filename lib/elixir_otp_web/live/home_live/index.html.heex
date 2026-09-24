@@ -87,6 +87,7 @@
                 <th scope="col">Title</th>
                 <th scope="col">Status</th>
                 <th scope="col" class="text-center">Retries</th>
+                <th scope="col">Timeout time</th>
                 <th scope="col">Finished at</th>
               </tr>
             </thead>
@@ -104,6 +105,7 @@
                   <span class="job-status" data-status={job.status}>{job.status}</span>
                 </td>
                 <td class="text-center tabular-nums">{job.retries}</td>
+                <td class="tabular-nums">{job.timeout} ms</td>
                 <td class="whitespace-nowrap text-secondary tabular-nums">
                   {format_date(job.finished_at)}
                 </td>

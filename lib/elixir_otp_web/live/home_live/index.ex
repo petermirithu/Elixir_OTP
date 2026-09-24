@@ -6,13 +6,9 @@ defmodule ElixirOtpWeb.HomeLive.Index do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(PubSub, "job_updates")
-      IO.inspect("Subscribed!!!!!!!!!... PubSub .............")
     end
 
     {jobs_queued, processing_stats} = fetch_jobs()
-
-    IO.inspect(jobs_queued)
-    IO.inspect(processing_stats)
 
     {
       :ok,
