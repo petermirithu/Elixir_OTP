@@ -44,6 +44,8 @@
   --color-warning-content: oklch(0% 0 0);
   --color-error: oklch(70% 0.191 22.216);
   --color-error-content: oklch(0% 0 0);
+  --color-amber: oklch(75% 0.183 55.934);
+  --color-amber-content: oklch(27% 0.041 260.031);
   --radius-selector: 2rem;
   --radius-field: 2rem;
   --radius-box: 2rem;
@@ -130,8 +132,8 @@ main:has(#jobs-dashboard) > div {
 .job-status[data-status="pending"] { --status-color: var(--color-warning); }
 .job-status[data-status="running"] { --status-color: var(--color-info); }
 .job-status[data-status="deferred"],
-.job-status[data-status="retried"],
-.job-status[data-status="retrying"] { --status-color: var(--color-accent); }
+.job-status[data-status="retryable"],
+.job-status[data-status="retrying"] { --status-color: var(--color-amber); }
 
 #jobs-table th {
   padding: 0.75rem 1rem;

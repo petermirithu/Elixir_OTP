@@ -1,31 +1,33 @@
 defmodule ElixirOtp.JobQueue do
   use GenServer
-  alias ElixirOtp.PubSub
+  alias ElixirOtp.JobStore
 
-  defstruct jobs: :queue.new()
+  @server_name :job_queue
+
+  defstruct job_ids: :queue.new()
 
   # client
   def start_link(_args) do
-    GenServer.start_link(__MODULE__, %{}, name: :job_queue)
+    GenServer.start_link(__MODULE__, %{}, name: @server_name)
   end
 
   def add_job(job_title) do
-    GenServer.call(:job_queue, {:enqueue, job_title})
+    GenServer.call(@server_name, {:enqueue, job_title})
   end
 
   def get_job_to_process() do
-    GenServer.call(:job_queue, :pop_job)
+    GenServer.call(@server_name, :pop_job)
   end
 
-  def list_jobs() do
-    GenServer.call(:job_queue, :list_jobs)
+  def get_pending_jobs() do
+    GenServer.call(@server_name, :pending_jobs)
   end
 
   # callbacks
   @impl true
   def init(_state) do
     state = %__MODULE__{
-      jobs: :queue.new()
+      job_ids: :queue.new()
     }
 
     {:ok, state}
@@ -42,41 +44,27 @@ defmodule ElixirOtp.JobQueue do
       timeout: 0
     }
 
-    new_queue = :queue.in(job, state.jobs)
+    JobStore.add_or_update_job(job)
 
-    client_update_queued_jobs(new_queue)
+    new_queue = :queue.in(job.id, state.job_ids)
 
-    {:reply, {:ok, job}, %{state | jobs: new_queue}}
+    {:reply, {:ok, job}, %{state | job_ids: new_queue}}
   end
 
   @impl true
-  def handle_call(:list_jobs, _from, state) do
-    jobs = queue_jobs_as_list(state.jobs)
-    {:reply, jobs, state}
+  def handle_call(:pending_jobs, _from, state) do
+    job_ids = :queue.to_list(state.job_ids)
+    {:reply, job_ids, state}
   end
 
   @impl true
   def handle_call(:pop_job, _from, state) do
-    case :queue.out(state.jobs) do
+    case :queue.out(state.job_ids) do
       {:empty, _} ->
         {:reply, :empty, state}
 
-      {{:value, job}, remaining} ->
-        client_update_queued_jobs(remaining)
-        {:reply, {:ok, job}, %{state | jobs: remaining}}
+      {{:value, job_id}, remaining} ->
+        {:reply, {:ok, job_id}, %{state | job_ids: remaining}}
     end
-  end
-
-  # Private functions
-  defp queue_jobs_as_list(queue_jobs) do
-    :queue.to_list(queue_jobs)
-  end
-
-  defp client_update_queued_jobs(jobs) do
-    Phoenix.PubSub.broadcast(
-      PubSub,
-      "job_updates",
-      {:update_queued_jobs, queue_jobs_as_list(jobs)}
-    )
   end
 end

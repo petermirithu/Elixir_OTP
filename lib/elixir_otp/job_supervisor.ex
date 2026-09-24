@@ -8,6 +8,7 @@ defmodule ElixirOtp.JobSupervisor do
   # callbacks
   def init(_init_args) do
     children = [
+      ElixirOtp.JobStore,
       ElixirOtp.JobQueue,
       ElixirOtp.JobProcessor,
       {Task.Supervisor, name: :worker_supervisor}
