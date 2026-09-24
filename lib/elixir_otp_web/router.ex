@@ -17,7 +17,15 @@ defmodule ElixirOtpWeb.Router do
   scope "/", ElixirOtpWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live_session nil, on_mount: [] do
+      live "/", HomeLive.Index
+    end
+  end
+
+  scope "/api", ElixirOtpWeb do
+    pipe_through :api
+
+    post "/job/queue", JobsController, :queue
   end
 
   # Other scopes may use custom stacks.

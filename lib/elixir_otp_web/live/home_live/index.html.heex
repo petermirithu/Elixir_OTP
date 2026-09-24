@@ -1,0 +1,122 @@
+<Layouts.app flash={@flash}>
+  <div
+    id="jobs-dashboard"
+    data-theme="corporate"
+    class="min-h-screen bg-base-200/40 text-base-content"
+  >
+    <header class="border-b border-base-300/70 bg-base-100">
+      <div class="mx-auto max-w-[1440px] px-5 py-4 sm:px-8 lg:px-12">
+        <span class="text-base font-semibold">Elixir OTP</span>
+      </div>
+    </header>
+
+    <div class="mx-auto max-w-[1440px] px-5 py-6 sm:px-8 lg:px-12">
+      <section aria-labelledby="dashboard-heading">
+        <h1 id="dashboard-heading" class="text-2xl font-semibold">Jobs</h1>
+
+        <dl
+          id="job-metrics"
+          class="mt-5 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5"
+        >
+          <div class="job-stat">
+            <dt>
+              Queued
+              <span aria-hidden="true"><.icon name="hero-queue-list" class="size-5" /></span>
+            </dt>
+            <dd>{length(@jobs_queued)}</dd>
+          </div>
+          <div class="job-stat">
+            <dt>
+              Workers running
+              <span aria-hidden="true" class="text-info"><.icon
+                name="hero-cpu-chip"
+                class="size-5"
+              /></span>
+            </dt>
+            <dd>{@workers_running}</dd>
+          </div>
+          <div class="job-stat">
+            <dt>
+              Being retried
+              <span aria-hidden="true" class="text-accent"><.icon
+                name="hero-arrow-path"
+                class="size-5"
+              /></span>
+            </dt>
+            <dd>{@jobs_retrying}</dd>
+          </div>
+          <div class="job-stat">
+            <dt>
+              Completed
+              <span aria-hidden="true" class="text-success"><.icon
+                name="hero-check-circle"
+                class="size-5"
+              /></span>
+            </dt>
+            <dd>{@jobs_completed}</dd>
+          </div>
+          <div class="job-stat">
+            <dt>
+              Failed
+              <span aria-hidden="true" class="text-error"><.icon
+                name="hero-exclamation-circle"
+                class="size-5"
+              /></span>
+            </dt>
+            <dd>{@jobs_failed}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section
+        aria-labelledby="jobs-heading"
+        class="mt-6 overflow-hidden rounded border border-base-300 bg-base-100"
+      >
+        <div class="border-b border-base-300 px-4 py-3">
+          <h2 id="jobs-heading" class="text-sm font-semibold">All jobs ({length(@jobs)})</h2>
+        </div>
+
+        <div class="overflow-x-auto" role="region" aria-label="Jobs table" tabindex="0">
+          <table id="jobs-table" class="w-full min-w-[640px] border-collapse text-left text-sm">
+            <caption class="sr-only">
+              Jobs with their status, retry count, and finish time
+            </caption>
+            <thead class="border-b border-base-300/60 bg-base-200/40">
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Title</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="text-center">Retries</th>
+                <th scope="col">Finished at</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-base-300/50">
+              <tr
+                :for={job <- @jobs}
+                id={"job-#{job.id}"}
+                class="hover:bg-base-200/30"
+              >
+                <td class="text-secondary tabular-nums">{job.id}</td>
+                <td>
+                  <p class="max-w-sm break-words">{job.title}</p>
+                </td>
+                <td>
+                  <span class="job-status" data-status={job.status}>{job.status}</span>
+                </td>
+                <td class="text-center tabular-nums">{job.retries}</td>
+                <td class="whitespace-nowrap text-secondary tabular-nums">
+                  {format_date(job.finished_at)}
+                </td>
+              </tr>
+              <tr :if={@jobs == []} id="jobs-empty">
+                <td colspan="5">
+                  <p class="py-6 text-center text-secondary">No jobs yet.</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</Layouts.app>
