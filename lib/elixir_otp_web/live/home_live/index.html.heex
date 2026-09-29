@@ -117,8 +117,14 @@
                 </td>
               </tr>
               <tr :if={@jobs == []} id="jobs-empty">
-                <td colspan="5">
-                  <p class="py-6 text-center text-secondary">No jobs yet.</p>
+                <td colspan="6">
+                  <div class="text-center text-secondary py-6">
+                    <.icon
+                      name="hero-briefcase"
+                      class="size-8"
+                    />
+                    <p class="py-6">No jobs yet.</p>
+                  </div>
                 </td>
               </tr>
             </tbody>

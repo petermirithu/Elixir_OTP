@@ -204,11 +204,24 @@ defmodule ElixirOtp.JobProcessor do
       job ->
         number = :rand.uniform(100)
 
-        if rem(number, 2) == 0 and not String.contains?(job.title, "fail") do
-          {:ok, "Job processed successfully!"}
-        else
-          {:error, "We are simulating a failed job!"}
-        end
+        return_job_status(
+          rem(number, 2) == 0,
+          String.contains?(job.title, "fail"),
+          String.contains?(job.title, "crash")
+        )
     end
+  end
+
+  defp return_job_status(is_divisble, fail_job, crash_job)
+       when is_divisble == true and fail_job == false and crash_job == false do
+    {:ok, "Job processed successfully!"}
+  end
+
+  defp return_job_status(_, _, crash_job) when crash_job == false do
+    {:error, "We are simulating a failed job!"}
+  end
+
+  defp return_job_status(_, _, crash_job) when crash_job == true do
+    raise "Job Crashed! Terminating process."
   end
 end
